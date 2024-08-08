@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "geocell"
+version = "0.1.0"
+description = "Geographic Visualization of a Cellular Networks with Point Coordinates Using Streamlit"
+authors = ["debu69er <debu69er@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+streamlit = "^1.37.1"
+folium = "^0.17.0"
+numpy = "^2.0.1"
+streamlit-antd-components = "^0.3.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
