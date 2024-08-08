@@ -1,31 +1,48 @@
 import colorsys
+from math import asin, atan2, cos, degrees, radians, sin
 
 import folium
+import pandas as pd
 import streamlit as st
 from branca.element import MacroElement, Template
 
 
 class GeoApp:
-    def __init__(self, geocell_data, driveless_data):
+    def __init__(
+        self, geocell_data: str | pd.DataFrame, driveless_data: str | pd.DataFrame
+    ):
         """
         Initialize the GeoApp with geocell and driveless data.
         """
-        self.geocell_data = geocell_data
-        self.driveless_data = driveless_data
+        self.geocell_data = self.load_data(geocell_data)
+        self.driveless_data = self.load_data(driveless_data)
         self.unique_cellname = self.get_unique_cellname()
         self.map_center = self.calculate_map_center()
         self.tile_options = self.define_tile_options()
         self.map = None
         self.ci_colors = self.assign_ci_colors()
-        self.cell_edge_coordinates = {}  # New attribute to store cell edge coordinates
+        self.cell_edge_coordinates = {}
 
-    def get_unique_cellname(self):
+    # Data loading and preprocessing methods
+    @staticmethod
+    def load_data(data: str | pd.DataFrame) -> pd.DataFrame:
+        """
+        Load data from a CSV file or a DataFrame.
+        """
+        if isinstance(data, str):
+            return pd.read_csv(data)
+        elif isinstance(data, pd.DataFrame):
+            return data
+
+    def get_unique_cellname(self) -> list[str]:
         """
         Extract and sort unique Cell IDs.
         """
+        if "cellname" not in self.geocell_data.columns:
+            raise ValueError("Column 'cellname' does not exist in geocell_data.")
         return sorted(self.geocell_data["cellname"].unique())
 
-    def calculate_map_center(self):
+    def calculate_map_center(self) -> list[float]:
         """
         Calculate the geographic center of the map.
         """
@@ -34,7 +51,8 @@ class GeoApp:
             self.geocell_data["Longitude"].mean(),
         ]
 
-    def define_tile_options():
+    @staticmethod
+    def define_tile_options() -> dict[str, str]:
         """
         Define map tile options.
         """
@@ -43,50 +61,36 @@ class GeoApp:
             "Google Hybrid": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         }
 
-    def initialize_map(self):
-        """
-        Initialize the map with a selected tile provider.
-        """
-        if "tile_provider" not in st.session_state:
-            st.session_state.tile_provider = list(self.tile_options.keys())[1]
-        tile_provider = st.selectbox(
-            "Map",
-            list(self.tile_options.keys()),
-            index=list(self.tile_options.keys()).index(st.session_state.tile_provider),
-            key="tile_provider_select",
-        )
-        if st.session_state.tile_provider != tile_provider:
-            st.session_state.tile_provider = tile_provider
-            st.rerun()
-        self.map = folium.Map(
-            location=self.map_center,
-            zoom_start=15,
-            tiles=self.tile_options[tile_provider],
-            attr=tile_provider,
-        )
-
-    def assign_ci_colors(self):
+    # Color assignment methods
+    def assign_ci_colors(self) -> dict[str, str]:
         """
         Assign colors to unique Cell IDs using HSV color space.
         """
-        ci_colors = {}
-        num_colors = len(self.unique_cellname)
-        for index, ci in enumerate(self.unique_cellname):
-            hue = index / num_colors
-            rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
-            color = f"#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}"
-            ci_colors[ci] = color
-        return ci_colors
+        unique_cellnames = self.unique_cellname
+        num_colors = len(unique_cellnames)
+        return {
+            ci: self.hsv_to_hex(index / num_colors)
+            for index, ci in enumerate(unique_cellnames)
+        }
 
-    def get_ci_color(self, ci):
+    @staticmethod
+    def hsv_to_hex(hue: float) -> str:
+        """
+        Convert an HSV color to its hexadecimal string representation.
+        """
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        return f"#{int(rgb[0] * 255):02x}{int(rgb[1] * 255):02x}{int(rgb[2] * 255):02x}"
+
+    def get_ci_color(self, ci: str) -> str:
         """
         Get color based on Cell ID.
         """
         return self.ci_colors.get(ci, "black")
 
-    def get_rsrp_color(self, rsrp):
+    @staticmethod
+    def get_rsrp_color(rsrp: float) -> str:
         """
-        Determines the color representation based on the RSRP value.
+        Determine the color representation based on the RSRP value.
         """
         ranges = [
             (-80, "blue"),
@@ -100,78 +104,108 @@ class GeoApp:
                 return color
         return "red"
 
-    def create_sector_beam(self, lat, lon, azimuth, beamwidth, radius):
+    # Sector beam calculation methods
+    def create_sector_polygon(
+        self, lat: float, lon: float, azimuth: float, beamwidth: float, radius: float
+    ) -> list[list[float]]:
+        """
+        Create a sector beam polygon starting from the given latitude and longitude, with the given azimuth, beamwidth, and radius.
+        """
+        lat_rad, lon_rad, azimuth_rad = radians(lat), radians(lon), radians(azimuth)
+        beamwidth_rad = radians(beamwidth)
+        angle_step = beamwidth_rad / 49  # 50 points
+        start_angle = azimuth_rad - beamwidth_rad / 2
+
+        points = [[lat, lon]]  # Start from the given lat, lon
+        points.extend(
+            [
+                self.calculate_point(
+                    lat_rad, lon_rad, start_angle + i * angle_step, radius
+                )
+                for i in range(50)
+            ]
+        )
+        points.append([lat, lon])  # Close the polygon back to the start point
+
+        return points
+
+    @staticmethod
+    def calculate_point(
+        lat_rad: float, lon_rad: float, angle: float, radius: float
+    ) -> list[float]:
+        """
+        Calculate a point on the earth's surface based on an angle and radius.
+        """
+        lat_new = asin(
+            sin(lat_rad) * cos(radius / 6371)
+            + cos(lat_rad) * sin(radius / 6371) * cos(angle)
+        )
+        lon_new = lon_rad + atan2(
+            sin(angle) * sin(radius / 6371) * cos(lat_rad),
+            cos(radius / 6371) - sin(lat_rad) * sin(lat_new),
+        )
+        return [degrees(lat_new), degrees(lon_new)]
+
+    def create_circle_at_edge(
+        self,
+        lat: float,
+        lon: float,
+        radius: float,
+        color: str,
+        layer: folium.FeatureGroup,
+    ):
+        """
+        Create a circle with transparency at the given latitude and longitude, with the specified radius.
+        """
+        folium.Circle(
+            location=[lat, lon],
+            radius=0.001,  # Radius in meters
+            color="rgba(0, 0, 0, 0)",
+            fill=True,
+            fill_color="rgba(0, 0, 0, 0)",
+            fill_opacity=0.2,  # Transparent fill
+        ).add_to(layer)
+
+    def find_edge_beam_center(
+        self, lat: float, lon: float, azimuth: float, radius: float
+    ) -> list[float]:
+        """
+        Calculate the center point of the edge beam.
+        """
+        return self.calculate_point(
+            radians(lat), radians(lon), radians(azimuth), radius
+        )
+
+    def create_sector_beam(
+        self, lat: float, lon: float, azimuth: float, beamwidth: float, radius: float
+    ) -> tuple[list[list[float]], list[float]]:
         """
         Create a sector beam polygon and calculate its edge point.
         """
-        from math import asin, atan2, cos, degrees, radians, sin
-
-        lat_rad = radians(lat)
-        lon_rad = radians(lon)
-        azimuth_rad = radians(azimuth)
-        beamwidth_rad = radians(beamwidth)
-        num_points = 50
-        angle_step = beamwidth_rad / (num_points - 1)
-        start_angle = azimuth_rad - beamwidth_rad / 2
-        points = []
-
-        for i in range(num_points):
-            angle = start_angle + i * angle_step
-            lat_new = asin(
-                sin(lat_rad) * cos(radius / 6371)
-                + cos(lat_rad) * sin(radius / 6371) * cos(angle)
-            )
-            lon_new = lon_rad + atan2(
-                sin(angle) * sin(radius / 6371) * cos(lat_rad),
-                cos(radius / 6371) - sin(lat_rad) * sin(lat_new),
-            )
-            points.append([degrees(lat_new), degrees(lon_new)])
-
-        # Calculate the edge point (middle of the arc)
-        mid_angle = azimuth_rad
-        edge_lat = asin(
-            sin(lat_rad) * cos(radius / 6371)
-            + cos(lat_rad) * sin(radius / 6371) * cos(mid_angle)
-        )
-        edge_lon = lon_rad + atan2(
-            sin(mid_angle) * sin(radius / 6371) * cos(lat_rad),
-            cos(radius / 6371) - sin(lat_rad) * sin(edge_lat),
-        )
-        edge_point = [degrees(edge_lat), degrees(edge_lon)]
+        points = self.create_sector_polygon(lat, lon, azimuth, beamwidth, radius)
+        edge_point = self.find_edge_beam_center(lat, lon, azimuth, radius)
         return points, edge_point
 
+    # Map layer addition methods
     def add_geocell_layer(self):
         """
         Add the geocell layer to the map.
         """
         geocell_layer = folium.FeatureGroup(name="Geocell Sites")
 
-        polygons = []
-        for _, row in self.geocell_data.iterrows():
-            color = self.get_ci_color(row["cellname"])
+        polygons = [
+            (row, self.get_ci_color(row["cellname"]))
+            for _, row in self.geocell_data.iterrows()
+        ]
+
+        for row, color in polygons:
             self.add_circle_marker(row, color, geocell_layer)
             self.add_site_label(row, geocell_layer)
-            polygons.append((row, color))
-
-        # Add polygons after markers to prevent them from being sealed by circles
-        for row, color in polygons:
             self.add_sector_beam(row, color, geocell_layer)
 
         geocell_layer.add_to(self.map)
 
-    def create_popup_content(self, row):
-        """
-        Create HTML content for popups.
-        """
-        return f"""
-        <div style="font-family: Arial; font-size: 16px;">
-            <b>Site:</b> {row['siteid']}<br>
-            <b>Node:</b> {row['nodeid']}<br>
-            <b>Cell:</b> {row['cellname']}
-        </div>
-        """
-
-    def add_sector_beam(self, row, color, layer):
+    def add_sector_beam(self, row: pd.Series, color: str, layer: folium.FeatureGroup):
         """
         Add a sector beam to the map.
         """
@@ -180,42 +214,24 @@ class GeoApp:
             row["Longitude"],
             row["Dir"],
             row["Ant_BW"],
-            row["Ant_Size"],  # Use Ant_Size as the radius
+            row["Ant_Size"],
         )
-
-        # Debug: Print edge point coordinates
-        st.write(f"Edge Point for cell {row['cellname']}: {edge_point}")
 
         folium.Polygon(
             locations=sector_polygon,
             color="black",
             fill=True,
             fill_color=color,
-            fill_opacity=1.0,
+            fill_opacity=0.6,
         ).add_to(layer)
 
-        # Add edge point marker and store coordinates
-        edge_marker = folium.CircleMarker(
-            location=edge_point,
-            radius=3,
-            color="white",
-            fill=True,
-            fill_color="white",
-            fill_opacity=1.0,
-            popup=folium.Popup(f"Cell Edge: {row['cellname']}", max_width=250),
+        self.create_circle_at_edge(
+            edge_point[0], edge_point[1], row["Ant_Size"], color, layer
         )
-
-        # Debug: Check if marker is being added
-        if edge_marker:
-            st.error(f"Edge marker for cell {row['cellname']} added successfully")
-        else:
-            st.error(f"Failed to add edge marker for cell {row['cellname']}")
-
-        edge_marker.add_to(layer)
 
         self.cell_edge_coordinates[row["cellname"]] = edge_point
 
-    def add_circle_marker(self, row, color, layer):
+    def add_circle_marker(self, row: pd.Series, color: str, layer: folium.FeatureGroup):
         """
         Add a circle marker for a cell site.
         """
@@ -230,33 +246,35 @@ class GeoApp:
             fill_opacity=1.0,
         ).add_to(layer)
 
-    def add_site_label(self, row, layer):
+    def add_site_label(self, row: pd.Series, layer: folium.FeatureGroup):
         """
         Add a label for a cell site.
         """
         folium.Marker(
             location=[row["Latitude"], row["Longitude"]],
-            popup=row["siteid"],
+            popup=row["site"],
             icon=folium.DivIcon(
-                html=f'<div style="font-size: 24pt; color: red">{row["siteid"]}</div>'
+                html=f'<div style="font-size: 24pt; color: red">{row["site"]}</div>'
             ),
         ).add_to(layer)
 
-    def add_driveless_layer(self, color_by_ci=True):
+    def add_driveless_layer(self, color_by_ci: bool = True):
         """
         Add the driveless data layer to the map.
         """
         driveless_layer = folium.FeatureGroup(name="Driveless Data")
 
         for _, row in self.driveless_data.iterrows():
-            if color_by_ci:
-                color = self.get_ci_color(row["cellname"])
-            else:
-                color = self.get_rsrp_color(row["rsrp_mean"])
-            folium.CircleMarker(
-                location=[row["lat_grid"], row["long_grid"]],
-                radius=4,
-                popup=f"cellname: {row['cellname']} RSRP: {row['rsrp_mean']} dBm",
+            color = (
+                self.get_ci_color(row["cellname"])
+                if color_by_ci
+                else self.get_rsrp_color(row["rsrp_mean"])
+            )
+            bounds = self.calculate_rectangle_bounds(row["lat_grid"], row["long_grid"])
+
+            folium.Rectangle(
+                bounds=bounds,
+                popup=f"CI: {row['cellname']} RSRP: {row['rsrp_mean']} dBm",
                 color=color,
                 fill=True,
                 fill_color=color,
@@ -264,6 +282,15 @@ class GeoApp:
             ).add_to(driveless_layer)
 
         driveless_layer.add_to(self.map)
+
+    @staticmethod
+    def calculate_rectangle_bounds(
+        lat: float, lon: float, size: float = 0.000165
+    ) -> list[list[float]]:
+        """
+        Calculate the bounds of a rectangle given a center point and size.
+        """
+        return [[lat - size, lon - size], [lat + size, lon + size]]
 
     def add_spider_graph(self):
         """
@@ -283,70 +310,104 @@ class GeoApp:
                     opacity=0.5,
                 ).add_to(self.map)
 
-    def display_map(self):
+    # Map display and legend methods
+    def initialize_map(self, tile_provider: str):
         """
-        Display the final map.
+        Initialize the map with the selected tile provider.
         """
-        folium.LayerControl().add_to(self.map)
-        self.add_legend()
-        st.components.v1.html(self.map._repr_html_(), height=800)
+        self.map = folium.Map(
+            location=self.map_center,
+            zoom_start=15,
+            tiles=self.tile_options[tile_provider],
+            attr=tile_provider,
+        )
 
-    def display_legend(self):
+    def add_dynamic_legend(self, color_by_ci: bool):
         """
-        Display a legend for cell colors.
+        Add a dynamic legend to the map based on whether it's showing RSRP or cellname data.
         """
-        st.subheader("Legend")
-        for cellname, color in self.ci_colors.items():
-            st.markdown(
-                f'<span style="color:{color};">{cellname}: {color}</span>',
-                unsafe_allow_html=True,
-            )
+        legend_template = self.create_legend_template(color_by_ci)
+        legend_macro = MacroElement()
+        legend_macro._template = Template(legend_template)
+        self.map.get_root().add_child(legend_macro)
 
-    def add_legend(self):
+    def create_legend_template(self, color_by_ci: bool) -> str:
         """
-        Add a combined legend to the map.
+        Create the legend template based on the color coding used.
         """
-        combined_legend_template = """
+        legend_template = """
         {% macro html(this, kwargs) %}
         <div id='maplegend' class='maplegend'
             style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
             border-radius: 6px; padding: 10px; font-size: 18px; right: 12px; top: 70px;'>
         <div class='legend-scale'>
           <ul class='legend-labels'>
-            <li><strong>RSRP</strong></li>
-            <li><span style='background: blue; opacity: 1;'></span>RSRP >= -85</li>
-            <li><span style='background: green; opacity: 1;'></span>-95 <= RSRP < -85</li>
-            <li><span style='background: yellow; opacity: 1;'></span>-105 <= RSRP < -95</li>
-            <li><span style='background: orange; opacity: 1;'></span>-115 <= RSRP < -105</li>
-            <li><span style='background: red; opacity: 1;'></span>RSRP < -115</li>
-          </ul>
-          <ul class='legend-labels'>
-            <li><strong>CELL IDENTITY</strong></li>
         """
-        for cellname, color in self.ci_colors.items():
-            combined_legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>CELL {cellname}</li>"
+        if color_by_ci:
+            legend_template += "<li><strong>EUtranCell</strong></li>"
+            for cellname, color in self.ci_colors.items():
+                legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>{cellname}</li>"
+        else:
+            legend_template += """
+            <li><strong>RSRP</strong></li>
+            <li><span style='background: blue; opacity: 1;'></span>RSRP >= -80</li>
+            <li><span style='background: #14380A; opacity: 1;'></span>-95 <= RSRP < -80</li>
+            <li><span style='background: #93FC7C; opacity: 1;'></span>-100 <= RSRP < -95</li>
+            <li><span style='background: yellow; opacity: 1;'></span>-110 <= RSRP < -100</li>
+            <li><span style='background: red; opacity: 1;'></span>RSRP < -110</li>
+            """
 
-        combined_legend_template += """
+        legend_template += """
           </ul>
         </div>
         </div>
         <style type='text/css'>
-          .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
-          .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
-          .maplegend ul.legend-labels li span {float: left; height: 16px; width: 16px; margin-right: 4.5px;}
+          .maplegend .legend-scale ul {margin: 0; padding: 0; list-style: none;}
+          .maplegend .legend-scale ul li {font-size: 80%; list-style: none; margin-left: 0; line-height: 18px; margin-bottom: 2px;}
+          .maplegend ul.legend-labels li span {display: block; float: left; height: 16px; width: 30px; margin-right: 5px; margin-left: 0; border: 1px solid #999;}
         </style>
         {% endmacro %}
         """
-        combined_macro = MacroElement()
-        combined_macro._template = Template(combined_legend_template)
-        self.map.get_root().add_child(combined_macro)
+        return legend_template
+
+    def display_map(self, color_by_ci: bool):
+        """
+        Display the final map with a dynamic legend.
+        """
+        folium.LayerControl().add_to(self.map)
+        self.add_dynamic_legend(color_by_ci)
+        st.components.v1.html(self.map._repr_html_(), height=600)
+
+    def create_popup_content(self, row: pd.Series) -> str:
+        """
+        Create HTML content for popups.
+        """
+        return f"""
+        <div style="font-family: Arial; font-size: 16px;">
+            <b>Site:</b> {row['site']}<br>
+            <b>Node:</b> {row['nodeid']}<br>
+            <b>Cell:</b> {row['cellname']}
+        </div>
+        """
 
     def run_geo_app(self):
         """
         Main method to run the GeoApp.
         """
-        self.initialize_map()
-        self.add_geocell_layer()
+        # Single tile provider selection for all maps
+        if "tile_provider" not in st.session_state:
+            st.session_state.tile_provider = list(self.tile_options.keys())[1]
+
+        tile_provider = st.selectbox(
+            "Select Map Tile Provider",
+            list(self.tile_options.keys()),
+            index=list(self.tile_options.keys()).index(st.session_state.tile_provider),
+            key="tile_provider_select",
+        )
+
+        if st.session_state.tile_provider != tile_provider:
+            st.session_state.tile_provider = tile_provider
+            st.rerun()
 
         categories = [
             "cellname",
@@ -355,69 +416,21 @@ class GeoApp:
             "RSRP with Spidergraph",
         ]
 
-        for category in categories:
-            st.subheader(category)
-
         col1, col2 = st.columns(2)
 
-        with col1:
-          if category == "cellname":
-            self.add_driveless_layer(color_by_ci=True)
+        for i, category in enumerate(categories):
+            column = col1 if i % 2 == 0 else col2
 
-        with col2:
-          if category == "RSRP":
-            self.add_driveless_layer(color_by_ci=False)
+            with column:
+                st.subheader(category)
 
-        col1, col2 = st.columns(2)
+                self.initialize_map(tile_provider)
+                self.add_geocell_layer()
 
-        with col1:
-          if category == "cellname with Spidergraph":
-            self.add_driveless_layer(color_by_ci=True)
-            self.add_spider_graph()
-        with col2:
-          if category == "RSRP with Spidergraph":
-            self.add_driveless_layer(color_by_ci=False)
-            self.add_spider_graph()
+                color_by_ci = "cellname" in category
+                self.add_driveless_layer(color_by_ci=color_by_ci)
 
-        self.display_map()
+                if "Spidergraph" in category:
+                    self.add_spider_graph()
 
-
-# End of GeoApp class
-
-"""
-Overall Class Structure and Functionality:
-
-1. Initialization:
-   - Sets up data structures and initial calculations.
-   - Prepares color assignments and map settings.
-
-2. Map Creation:
-   - Initializes a Folium map with customizable tile options.
-   - Allows user to select different map providers.
-
-3. Data Visualization:
-   - Adds geocell sites with sector beams and labels.
-   - Visualizes driveless data points.
-   - Implements a spider graph connecting driveless points to cell edges.
-
-4. Color Coding:
-   - Assigns unique colors to cell IDs.
-   - Uses color gradients for RSRP values.
-
-5. Interactivity:
-   - Provides popups with detailed information on markers.
-   - Allows toggling between different visualization modes.
-
-6. Legend:
-   - Adds a comprehensive legend explaining color codes for both cell IDs and RSRP values.
-
-7. Streamlit Integration:
-   - Uses Streamlit for the user interface and app layout.
-   - Implements category selection buttons for different visualization modes.
-
-8. Flexibility:
-   - Adapts to different antenna sizes and configurations.
-   - Calculates sector beams and edge points dynamically.
-
-This class provides a comprehensive tool for visualizing and analyzing cellular network data, combining geographical information with network performance metrics in an interactive web application.
-"""
+                self.display_map(color_by_ci)
