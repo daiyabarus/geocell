@@ -9,15 +9,15 @@ class GeoApp:
     def __init__(self, geocell_data, driveless_data):
         self.geocell_data = geocell_data
         self.driveless_data = driveless_data
-        self.unique_cis = self.get_unique_cis()
+        self.unique_cellname = self.get_unique_cellname()
         self.map_center = self.calculate_map_center()
         self.tile_options = self.define_tile_options()
         self.map = None
         self.ci_colors = self.assign_ci_colors()
 
-    def get_unique_cis(self):
+    def get_unique_cellname(self):
         """Extract and sort unique Cell IDs."""
-        return sorted(self.geocell_data["cellId"].unique())
+        return sorted(self.geocell_data["cellname"].unique())
 
     def calculate_map_center(self):
         """Calculate the geographic center of the map."""
@@ -83,7 +83,7 @@ class GeoApp:
                 return color
         return "red"
 
-    def create_sector_polygon(self, lat, lon, azimuth, beamwidth, radius):
+    def create_sector_beam(self, lat, lon, azimuth, beamwidth, radius):
         from math import asin, atan2, cos, degrees, radians, sin
 
         lat_rad = radians(lat)
@@ -115,23 +115,23 @@ class GeoApp:
 
         polygons = []
         for _, row in self.geocell_data.iterrows():
-            color = self.get_ci_color(row["cellId"])
+            color = self.get_ci_color(row["cellname"])
             self.add_circle_marker(row, color, geocell_layer)
-            self.add_custom_marker(row, geocell_layer)
+            self.add_site_label(row, geocell_layer)
             polygons.append((row, color))
 
         # Add polygons after markers to prevent them from being sealed by circles
         for row, color in polygons:
-            self.add_sector_polygon(row, color, geocell_layer)
+            self.add_sector_beam(row, color, geocell_layer)
 
         geocell_layer.add_to(self.map)
 
     def create_popup_content(self, row):
         return f"""
         <div style="font-family: Arial; font-size: 16px;">
-            <b>Site:</b> {row['Site_ID']}<br>
-            <b>Cell:</b> {row['Cell_Name']}<br>
-            <b>CI:</b> {row['cellId']}
+            <b>Site:</b> {row['siteid']}<br>
+            <b>Node:</b> {row['nodeid']}<br>
+            <b>Cell:</b> {row['cellname']}
         </div>
         """
 
@@ -163,12 +163,12 @@ class GeoApp:
             fill_opacity=1.0,
         ).add_to(layer)
 
-    def add_custom_marker(self, row, layer):
+    def add_site_label(self, row, layer):
         folium.Marker(
             location=[row["Latitude"], row["Longitude"]],
-            popup=row["Site_ID"],
+            popup=row["siteid"],
             icon=folium.DivIcon(
-                html=f'<div style="font-size: 24pt; color: red">{row["Site_ID"]}</div>'
+                html=f'<div style="font-size: 24pt; color: red">{row["siteid"]}</div>'
             ),
         ).add_to(layer)
 
@@ -177,13 +177,13 @@ class GeoApp:
 
         for _, row in self.driveless_data.iterrows():
             if color_by_ci:
-                color = self.get_ci_color(row["ci"])
+                color = self.get_ci_color(row["cellname"])
             else:
                 color = self.get_rsrp_color(row["rsrp_mean"])
             folium.CircleMarker(
                 location=[row["lat_grid"], row["long_grid"]],
                 radius=4,
-                popup=f"CI: {row['ci']} RSRP: {row['rsrp_mean']} dBm",
+                popup=f"cellname: {row['cellname']} RSRP: {row['rsrp_mean']} dBm",
                 color=color,
                 fill=True,
                 fill_color=color,
@@ -195,13 +195,12 @@ class GeoApp:
     def add_spider_graph(self):
         for _, row in self.driveless_data.iterrows():
             geocell_match = self.geocell_data[
-                (self.geocell_data["cellId"] == row["ci"])
-                & (self.geocell_data["eNBId"] == row["enodebid"])
+                (self.geocell_data["cellname"] == row["cellname"])
             ]
             if not geocell_match.empty:
                 geocell_lat = geocell_match["Latitude"].values[0]
                 geocell_lon = geocell_match["Longitude"].values[0]
-                color = self.get_ci_color(row["ci"])
+                color = self.get_ci_color(row["cellname"])
                 folium.PolyLine(
                     locations=[
                         [row["lat_grid"], row["long_grid"]],
@@ -219,9 +218,9 @@ class GeoApp:
 
     def display_legend(self):
         st.subheader("Legend")
-        for ci, color in self.ci_colors.items():
+        for cellname, color in self.ci_colors.items():
             st.markdown(
-                f'<span style="color:{color};">{ci}: {color}</span>',
+                f'<span style="color:{color};">{cellname}: {color}</span>',
                 unsafe_allow_html=True,
             )
 
@@ -244,8 +243,8 @@ class GeoApp:
           <ul class='legend-labels'>
             <li><strong>CELL IDENTITY</strong></li>
         """
-        for ci, color in self.ci_colors.items():
-            combined_legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>CI {ci}</li>"
+        for cellname, color in self.ci_colors.items():
+            combined_legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>CELL {cellname}</li>"
 
         combined_legend_template += """
           </ul>
@@ -270,14 +269,19 @@ class GeoApp:
 
         with col2:
             if "category" not in st.session_state:
-                st.session_state.category = "CellId"
+                st.session_state.category = "cellname"
             category = st.selectbox(
                 "Category",
-                ["CellId", "RSRP", "CellId with Spidergraph", "RSRP with Spidergraph"],
-                index=[
-                    "CellId",
+                [
+                    "cellname",
                     "RSRP",
-                    "CellId with Spidergraph",
+                    "cellname with Spidergraph",
+                    "RSRP with Spidergraph",
+                ],
+                index=[
+                    "cellname",
+                    "RSRP",
+                    "Cell with Spidergraph",
                     "RSRP with Spidergraph",
                 ].index(st.session_state.category),
                 key="category_select",
@@ -287,7 +291,7 @@ class GeoApp:
                 st.rerun()
 
         self.add_geocell_layer()
-        color_by_ci = "CellId" in category
+        color_by_ci = "cellname" in category
         self.add_driveless_layer(color_by_ci=color_by_ci)
 
         if "Spidergraph" in category:
