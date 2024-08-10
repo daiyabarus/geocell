@@ -6,8 +6,8 @@ import streamlit_antd_components as sac
 from layout import GeoApp, page_config
 
 script_dir = os.path.dirname(__file__)
-sitelist_mcom = os.path.join(script_dir, "geocell.csv")
-sitelist_driveless = os.path.join(script_dir, "driveless.csv")
+sitelist_mcom = os.path.join(script_dir, "test_geocell.csv")
+sitelist_driveless = os.path.join(script_dir, "test_driveless.csv")
 
 
 def init_session_state():

@@ -184,6 +184,7 @@ class GeoApp:
         """
         points = self.create_sector_polygon(lat, lon, azimuth, beamwidth, radius)
         edge_point = self.find_edge_beam_center(lat, lon, azimuth, radius)
+        # st.write(edge_point)
         return points, edge_point
 
     # Map layer addition methods
@@ -199,9 +200,9 @@ class GeoApp:
         ]
 
         for row, color in polygons:
-            self.add_circle_marker(row, color, geocell_layer)
-            self.add_site_label(row, geocell_layer)
             self.add_sector_beam(row, color, geocell_layer)
+            self.add_site_label(row, geocell_layer)
+            self.add_circle_marker(row, color, geocell_layer)
 
         geocell_layer.add_to(self.map)
 
@@ -230,6 +231,7 @@ class GeoApp:
         )
 
         self.cell_edge_coordinates[row["cellname"]] = edge_point
+        # st.write(edge_point)
 
     def add_circle_marker(self, row: pd.Series, color: str, layer: folium.FeatureGroup):
         """
@@ -250,11 +252,12 @@ class GeoApp:
         """
         Add a label for a cell site.
         """
+        x, y = self.cell_edge_coordinates[row["cellname"]]
         folium.Marker(
-            location=[row["Latitude"], row["Longitude"]],
-            popup=row["site"],
+            location=[x, y],
+            popup=row["cellname"],
             icon=folium.DivIcon(
-                html=f'<div style="font-size: 24pt; color: red">{row["site"]}</div>'
+                html=f'<div style="font-size: 16pt; color: red">{row["cellname"]}</div>'
             ),
         ).add_to(layer)
 
@@ -268,13 +271,13 @@ class GeoApp:
             color = (
                 self.get_ci_color(row["cellname"])
                 if color_by_ci
-                else self.get_rsrp_color(row["rsrp_mean"])
+                else self.get_rsrp_color(row["rsrp"])
             )
             bounds = self.calculate_rectangle_bounds(row["lat_grid"], row["long_grid"])
 
             folium.Rectangle(
                 bounds=bounds,
-                popup=f"CI: {row['cellname']} RSRP: {row['rsrp_mean']} dBm",
+                popup=f"Cellname: {row['cellname']} RSRP: {row['rsrp']} dBm",
                 color=color,
                 fill=True,
                 fill_color=color,
@@ -285,7 +288,7 @@ class GeoApp:
 
     @staticmethod
     def calculate_rectangle_bounds(
-        lat: float, lon: float, size: float = 0.000165
+        lat: float, lon: float, size: float = 0.0000500
     ) -> list[list[float]]:
         """
         Calculate the bounds of a rectangle given a center point and size.
@@ -306,7 +309,7 @@ class GeoApp:
                         [edge_lat, edge_lon],
                     ],
                     color=color,
-                    weight=1,
+                    weight=0.5,
                     opacity=0.5,
                 ).add_to(self.map)
 
@@ -362,9 +365,9 @@ class GeoApp:
         </div>
         </div>
         <style type='text/css'>
-          .maplegend .legend-scale ul {margin: 0; padding: 0; list-style: none;}
-          .maplegend .legend-scale ul li {font-size: 80%; list-style: none; margin-left: 0; line-height: 18px; margin-bottom: 2px;}
-          .maplegend ul.legend-labels li span {display: block; float: left; height: 16px; width: 30px; margin-right: 5px; margin-left: 0; border: 1px solid #999;}
+          .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
+          .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
+          .maplegend ul.legend-labels li span {float: left; height: 16px; width: 16px; margin-right: 4.5px;}
         </style>
         {% endmacro %}
         """

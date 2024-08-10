@@ -1,363 +1,109 @@
-# geocell
-Geographic Visualization of a Cellular Networks with Point Coordinates Using Streamlit
+# GeoApp
 
+## Overview
 
-Tutorial: Visualizing Geo-Spatial Data with Python
-This tutorial demonstrates how to visualize geo-spatial data using Python. We will cover:
+This tutorial will guide you through creating a geospatial visualization app called `GeoApp`. The app is designed to visualize geospatial data, including cellular coverage and signal strength, using Python libraries such as Folium, Pandas, and Streamlit.
 
-Libraries needed for the project.
-How to create a sector beam and describe the formula.
-How to find the cell edge and describe the formula.
-How to create a Folium map with rectangle points.
-How to create a spider graph from point to point.
-How to assign colors using the HSV color space.
-How to create a legend on the map with HTML code.
-1. Libraries Used
-The following libraries are used in this project:
+## Libraries in Use
 
-colorsys: Provides utilities to convert colors between different color systems.
-math: Provides mathematical functions like trigonometric functions.
-folium: A Python library used to generate interactive maps.
-pandas: A data manipulation and analysis library.
-streamlit: A framework to create interactive web apps with Python.
-branca: A library that provides utilities for web mapping.
-python
-Copy code
-import colorsys
-from math import asin, atan2, cos, degrees, radians, sin
-import folium
-import pandas as pd
-import streamlit as st
-from branca.element import MacroElement, Template
-2. Creating a Sector Beam
-Description:
-A sector beam represents a specific directional area in which signals from a cell tower are transmitted. The beam's coverage is determined by parameters like azimuth, beamwidth, and radius.
+1. **colorsys**
+   The `colorsys` module provides functions to convert colors between different color systems, such as RGB and HSV. In this app, it's used to generate color codes in the HSV space, which are then converted to hexadecimal format for consistent color mapping.
 
-Formula:
-To calculate the points that form the sector beam, the following formulas are used:
+2. **math**
+   The `math` module is used for mathematical functions like trigonometry, which are essential for calculating angles, coordinates, and distances when creating sector beams and other map features.
 
-Latitude Calculation:
+3. **folium**
+   `folium` is a powerful Python library used for creating interactive maps. It allows easy integration of different map tiles, markers, and layers. In this app, Folium is used to render maps, add markers for cell sites, and draw polygons representing sector beams.
 
-lat_new
-=
-arcsin
-⁡
-(
-sin
-⁡
-(
-lat_rad
-)
-⋅
-cos
-⁡
-(
-radius
-/
-6371
-)
-+
-cos
-⁡
-(
-lat_rad
-)
-⋅
-sin
-⁡
-(
-radius
-/
-6371
-)
-⋅
-cos
-⁡
-(
-angle
-)
-)
-lat_new=arcsin(sin(lat_rad)⋅cos(radius/6371)+cos(lat_rad)⋅sin(radius/6371)⋅cos(angle))
-Longitude Calculation:
+4. **pandas**
+   `pandas` is a data manipulation library that provides data structures and functions needed to work with structured data, particularly tabular data. In `GeoApp`, it is used to load and process geospatial data from CSV files or DataFrames.
 
-lon_new
-=
-lon_rad
-+
-arctan
-⁡
-2
-(
-sin
-⁡
-(
-angle
-)
-⋅
-sin
-⁡
-(
-radius
-/
-6371
-)
-⋅
-cos
-⁡
-(
-lat_rad
-)
-,
-cos
-⁡
-(
-radius
-/
-6371
-)
-−
-sin
-⁡
-(
-lat_rad
-)
-⋅
-sin
-⁡
-(
-lat_new
-)
-)
-lon_new=lon_rad+arctan2(sin(angle)⋅sin(radius/6371)⋅cos(lat_rad),cos(radius/6371)−sin(lat_rad)⋅sin(lat_new))
-Implementation:
-python
-Copy code
-def create_sector_polygon(lat, lon, azimuth, beamwidth, radius):
-    lat_rad, lon_rad, azimuth_rad = radians(lat), radians(lon), radians(azimuth)
-    beamwidth_rad = radians(beamwidth)
-    angle_step = beamwidth_rad / 49  # 50 points
-    start_angle = azimuth_rad - beamwidth_rad / 2
+5. **streamlit**
+   `streamlit` is a framework for creating web apps directly from Python scripts. It simplifies the process of adding interactivity and UI elements to data-driven applications. In this project, Streamlit is used to build the front-end interface, allowing users to interact with the map and select various visualization options.
 
-    points = [[lat, lon]]  # Start from the given lat, lon
-    points.extend(
-        [
-            calculate_point(lat_rad, lon_rad, start_angle + i * angle_step, radius)
-            for i in range(50)
-        ]
-    )
-    points.append([lat, lon])  # Close the polygon back to the start point
+6. **branca.element**
+   `branca` is a Python library that works with Folium to create complex map elements like legends, popups, and more. The `MacroElement` and `Template` classes from `branca.element` are used in this app to create dynamic legends that change based on the data being visualized.
 
-    return points
-3. Finding the Cell Edge
-Description:
-The edge of the cell's coverage is crucial for understanding the boundary where the signal strength begins to weaken.
+## Map Tile Options
 
-Formula:
-To find the center point at the edge of the beam:
+The `GeoApp` includes a method called `define_tile_options` that defines the different map tile options available for use in the application. Map tiles are the images or layers that make up the visual representation of the map background. The app provides two tile options:
 
-Latitude Calculation:
+### 1. **OpenStreetMap**
+   - **URL:** `https://tile.openstreetmap.org/{z}/{x}/{y}.png`
+   - **Description:** OpenStreetMap (OSM) is a free, editable map of the world, created and maintained by a community of mappers. It's known for its high quality and up-to-date geographical data. The OSM tile option provides a standard street map view, which is suitable for a wide range of geospatial visualization tasks. It's open-source and doesn't require any API keys or usage restrictions.
 
-lat_new
-=
-arcsin
-⁡
-(
-sin
-⁡
-(
-lat_rad
-)
-⋅
-cos
-⁡
-(
-radius
-/
-6371
-)
-+
-cos
-⁡
-(
-lat_rad
-)
-⋅
-sin
-⁡
-(
-radius
-/
-6371
-)
-⋅
-cos
-⁡
-(
-angle
-)
-)
-lat_new=arcsin(sin(lat_rad)⋅cos(radius/6371)+cos(lat_rad)⋅sin(radius/6371)⋅cos(angle))
-Longitude Calculation:
+### 2. **Google Hybrid**
+   - **URL:** `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}`
+   - **Description:** The Google Hybrid tile combines both satellite imagery and road data, giving a comprehensive view that includes both natural features and man-made infrastructure. This tile is useful for visualizations where both geographical context and infrastructure details are important. The Google Hybrid tile provides a rich and detailed map view, but it typically requires API access and may have usage limits depending on the terms of service.
 
-lon_new
-=
-lon_rad
-+
-arctan
-⁡
-2
-(
-sin
-⁡
-(
-angle
-)
-⋅
-sin
-⁡
-(
-radius
-/
-6371
-)
-⋅
-cos
-⁡
-(
-lat_rad
-)
-,
-cos
-⁡
-(
-radius
-/
-6371
-)
-−
-sin
-⁡
-(
-lat_rad
-)
-⋅
-sin
-⁡
-(
-lat_new
-)
-)
-lon_new=lon_rad+arctan2(sin(angle)⋅sin(radius/6371)⋅cos(lat_rad),cos(radius/6371)−sin(lat_rad)⋅sin(lat_new))
-Implementation:
-python
-Copy code
-def find_edge_beam_center(lat, lon, azimuth, radius):
-    return calculate_point(radians(lat), radians(lon), radians(azimuth), radius)
-4. Creating a Folium Map with Rectangle Points
-Description:
-A Folium map can be used to visualize the geospatial data by drawing rectangles, polygons, markers, and other shapes.
+### How the Tiles are Defined
 
-Implementation:
-python
-Copy code
-def calculate_rectangle_bounds(lat, lon, size=0.000165):
-    return [[lat - size, lon - size], [lat + size, lon + size]]
-python
-Copy code
-def add_driveless_layer(self, color_by_ci=True):
-    driveless_layer = folium.FeatureGroup(name="Driveless Data")
+The `define_tile_options` method is a static method within the `GeoApp` class. It returns a dictionary where the keys are the names of the tile options (e.g., "OpenStreetmap" and "Google Hybrid"), and the values are the corresponding URL templates that Folium uses to fetch the map tiles.
 
-    for _, row in self.driveless_data.iterrows():
-        color = (
-            self.get_ci_color(row["cellname"])
-            if color_by_ci
-            else self.get_rsrp_color(row["rsrp_mean"])
-        )
-        bounds = calculate_rectangle_bounds(row["lat_grid"], row["long_grid"])
+Here's the method in the code:
 
-        folium.Rectangle(
-            bounds=bounds,
-            popup=f"CI: {row['cellname']} RSRP: {row['rsrp_mean']} dBm",
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=1,
-        ).add_to(driveless_layer)
+```python
+@staticmethod
+def define_tile_options() -> dict[str, str]:
+    """
+    Define map tile options.
+    """
+    return {
+        "Openstreetmap": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "Google Hybrid": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+    }
+```
 
-    driveless_layer.add_to(self.map)
-5. Creating a Spider Graph from Point to Point
-Description:
-A spider graph connects the edge points of cells with other points of interest, such as driveless data points, showing the relationship between them.
+## Color Conversion: `hsv_to_hex` Method
 
-Implementation:
-python
-Copy code
-def add_spider_graph(self):
-    for _, row in self.driveless_data.iterrows():
-        if row["cellname"] in self.cell_edge_coordinates:
-            edge_lat, edge_lon = self.cell_edge_coordinates[row["cellname"]]
-            color = self.get_ci_color(row["cellname"])
-            folium.PolyLine(
-                locations=[[row["lat_grid"], row["long_grid"]], [edge_lat, edge_lon]],
-                color=color,
-                weight=1,
-                opacity=0.5,
-            ).add_to(self.map)
-6. Assigning Colors Using HSV
-Description:
-The HSV (Hue, Saturation, Value) color space is used to assign colors to different cells based on their unique identifiers.
+In the `GeoApp`, the `hsv_to_hex` method is responsible for converting colors from the HSV (Hue, Saturation, Value) color space to the HEX color format, which is widely used in web development and visualization tools like Folium.
 
-Implementation:
-python
-Copy code
-def hsv_to_hex(hue):
+### What is HSV?
+
+The HSV color model represents colors in terms of:
+- **Hue (H):** The type of color, represented as a degree on the color wheel (0° to 360°). For example, 0° is red, 120° is green, and 240° is blue.
+- **Saturation (S):** The intensity or purity of the color, ranging from 0 (completely desaturated, grayscale) to 1 (fully saturated).
+- **Value (V):** The brightness of the color, ranging from 0 (completely dark) to 1 (maximum brightness).
+
+### The Conversion Formula
+
+The `hsv_to_hex` method converts HSV values to their corresponding RGB (Red, Green, Blue) values, and then formats these RGB values into a HEX string. Here's how it works:
+
+1. **Convert HSV to RGB:**
+   - The `colorsys.hsv_to_rgb` function is used for this conversion.
+   - The function takes in three parameters: `hue`, `saturation`, and `value`, and returns a tuple of RGB values, each ranging from 0 to 1.
+
+2. **Convert RGB to HEX:**
+   - Each RGB value is multiplied by 255 to convert it to the standard 8-bit range (0 to 255).
+   - The values are then formatted as a hexadecimal string using Python's string formatting capabilities.
+
+### Implementation in the Code
+
+Here's how the `hsv_to_hex` method is implemented:
+
+```python
+@staticmethod
+def hsv_to_hex(hue: float) -> str:
+    """
+    Convert an HSV color to its hexadecimal string representation.
+    """
     rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
     return f"#{int(rgb[0] * 255):02x}{int(rgb[1] * 255):02x}{int(rgb[2] * 255):02x}"
-python
-Copy code
-def assign_ci_colors(self):
-    unique_cellnames = self.unique_cellname
-    num_colors = len(unique_cellnames)
-    return {ci: hsv_to_hex(index / num_colors) for index, ci in enumerate(unique_cellnames)}
-7. Creating a Legend on the Map with HTML Code
-Description:
-A dynamic legend helps users understand the color coding used in the map, such as what each color represents in terms of signal strength (RSRP) or cell identifiers.
+```
 
-Implementation:
-python
-Copy code
-def create_legend_template(self, color_by_ci):
-    legend_template = """
-    {% macro html(this, kwargs) %}
-    <div id='maplegend' class='maplegend'
-        style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.8);
-        border-radius: 6px; padding: 10px; font-size: 14px; right: 10px; top: 10px;'>
-    <div class='legend-scale'>
-      <ul class='legend-labels'>
-    """
-    if color_by_ci:
-        legend_template += "<li><strong>EUtranCell</strong></li>"
-        for cellname, color in self.ci_colors.items():
-            legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>{cellname}</li>"
-    else:
-        legend_template += """
-        <li><strong>RSRP</strong></li>
-        <li><span style='background: blue; opacity: 1;'></span>RSRP >= -80</li>
-        <li><span style='background: #14380A; opacity: 1;'></span>-95 <= RSRP < -80</li>
-        <li><span style='background: #93FC7C; opacity: 1;'></span>-100 <= RSRP < -95</li>
-        <li><span style='background: yellow; opacity: 1;'></span>-110 <= RSRP < -100</li>
-        <li><span style='background: red; opacity: 1;'></span>RSRP < -110</li>
-        """
+How It Works
+Input: The method takes in a hue value as a float, typically between 0 and 1. This hue value represents the position on the color wheel and is divided by the number of unique colors (i.e., unique cell names) to evenly distribute colors across the spectrum.
 
-    legend_template += """
-      </ul>
-    </div>
-    </div>
-    <style type='text/css'>
-      .maplegend .legend-scale ul {margin: 0; padding: 0; list-style: none;}
-      .maplegend .legend-scale ul li {font-size: 80%; list-style: none; margin-left: 0; line-height: 18px; margin-bottom: 2px;}
-      .maplegend ul.legend-labels li span {display: block; float: left; height: 16px; width: 30px; margin-right: 5px; margin-left: 0; border: 1px solid #999;}
-    </style>
-    {% endmacro %}
-    """
-    return legend_template
+Processing:
+
+The method calls colorsys.hsv_to_rgb(hue, 1.0, 1.0) to convert the HSV value to an RGB tuple.
+The RGB values, each originally in the range [0, 1], are scaled to [0, 255] by multiplying by 255.
+Output: The method then returns the corresponding HEX color code as a string. For example, a hue of 0.5 (green) would yield a HEX value of #00ff00.
+
+Usage in GeoApp
+This method is used in the assign_ci_colors method to generate distinct colors for each unique cell ID (CI) in the dataset. These colors are then used to visualize different cell sectors on the map, ensuring that each sector is easily distinguishable.
+
+Example of Usage
+If you call hsv_to_hex(0.5), it will return #00ff00, which corresponds to a fully saturated and bright green color in HEX format.
+
+This explanation covers what the `hsv_to_hex` method does, the formula and process involved in converting HSV to HEX, and how this is implemented and used within the `GeoApp`.
