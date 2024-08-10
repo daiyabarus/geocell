@@ -6,6 +6,8 @@ import pandas as pd
 import streamlit as st
 from branca.element import MacroElement, Template
 
+from layout.styles import styling
+
 
 class GeoApp:
     def __init__(
@@ -334,6 +336,45 @@ class GeoApp:
         legend_macro._template = Template(legend_template)
         self.map.get_root().add_child(legend_macro)
 
+    # def create_legend_template(self, color_by_ci: bool) -> str:
+    #     """
+    #     Create the legend template based on the color coding used.
+    #     """
+    #     legend_template = """
+    #     {% macro html(this, kwargs) %}
+    #     <div id='maplegend' class='maplegend'
+    #         style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
+    #         border-radius: 6px; padding: 10px; font-size: 18px; right: 12px; top: 70px;'>
+    #     <div class='legend-scale'>
+    #       <ul class='legend-labels'>
+    #     """
+    #     if color_by_ci:
+    #         legend_template += "<li><strong>EUtranCell</strong></li>"
+    #         for cellname, color in self.ci_colors.items():
+    #             legend_template += f"<li><span style='background: {color}; opacity: 1;'></span>{cellname}</li>"
+    #     else:
+    #         legend_template += """
+    #         <li><strong>RSRP</strong></li>
+    #         <li><span style='background: blue; opacity: 1;'></span>RSRP >= -80</li>
+    #         <li><span style='background: #14380A; opacity: 1;'></span>-95 <= RSRP < -80</li>
+    #         <li><span style='background: #93FC7C; opacity: 1;'></span>-100 <= RSRP < -95</li>
+    #         <li><span style='background: yellow; opacity: 1;'></span>-110 <= RSRP < -100</li>
+    #         <li><span style='background: red; opacity: 1;'></span>RSRP < -110</li>
+    #         """
+
+    #     legend_template += """
+    #       </ul>
+    #     </div>
+    #     </div>
+    #     <style type='text/css'>
+    #       .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
+    #       .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
+    #       .maplegend ul.legend-labels li span {float: left; height: 16px; width: 16px; margin-right: 4.5px;}
+    #     </style>
+    #     {% endmacro %}
+    #     """
+    #     return legend_template
+
     def create_legend_template(self, color_by_ci: bool) -> str:
         """
         Create the legend template based on the color coding used.
@@ -344,7 +385,7 @@ class GeoApp:
             style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
             border-radius: 6px; padding: 10px; font-size: 18px; right: 12px; top: 70px;'>
         <div class='legend-scale'>
-          <ul class='legend-labels'>
+        <ul class='legend-labels'>
         """
         if color_by_ci:
             legend_template += "<li><strong>EUtranCell</strong></li>"
@@ -361,13 +402,19 @@ class GeoApp:
             """
 
         legend_template += """
-          </ul>
+        </ul>
         </div>
         </div>
         <style type='text/css'>
-          .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
-          .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
-          .maplegend ul.legend-labels li span {float: left; height: 16px; width: 16px; margin-right: 4.5px;}
+        .maplegend .legend-scale ul {margin: 0; padding: 0; color: #0f0f0f;}
+        .maplegend .legend-scale ul li {list-style: none; line-height: 18px; margin-bottom: 1.5px;}
+        .maplegend ul.legend-labels li span {
+            float: left;
+            height: 16px;
+            width: 16px;
+            margin-right: 4.5px;
+            border-radius: 50%; /* Make the rectangle a circle */
+        }
         </style>
         {% endmacro %}
         """
@@ -401,13 +448,37 @@ class GeoApp:
         if "tile_provider" not in st.session_state:
             st.session_state.tile_provider = list(self.tile_options.keys())[1]
 
-        tile_provider = st.selectbox(
-            "Select Map Tile Provider",
-            list(self.tile_options.keys()),
-            index=list(self.tile_options.keys()).index(st.session_state.tile_provider),
-            key="tile_provider_select",
+        st.markdown(
+            *styling(
+                "📝 Note:",
+                tag="h6",
+                text_align="left",
+                font_size=26,
+                color="red",
+            )
+        )
+        st.markdown(
+            *styling(
+                "The geographic data used in this analysis is simulated data created specifically for educational purposes. This data does not accurately reflect real conditions and is intended solely as an example to illustrate fundamental geoprocessing concepts. The use of this data is restricted to educational environments and should not be applied to make decisions with real implications."
+                "<br>😎",
+                tag="p",
+                text_align="justify",
+                font_size=18,
+                color="black",
+            )
         )
 
+        col1, _, _ = st.columns([1, 2, 2])
+        with col1:
+            tile_provider = st.selectbox(
+                "Select MAP",
+                list(self.tile_options.keys()),
+                index=list(self.tile_options.keys()).index(
+                    st.session_state.tile_provider
+                ),
+                key="tile_provider_select",
+            )
+        # with col2:
         if st.session_state.tile_provider != tile_provider:
             st.session_state.tile_provider = tile_provider
             st.rerun()

@@ -19,7 +19,7 @@ def run_app():
     page_config()
     tab_idx = sac.tabs(
         items=[
-            sac.TabsItem("MR, MDT, Driveless", icon="globe-asia-australia"),
+            sac.TabsItem("Geo Plotting", icon="globe-asia-australia"),
             sac.TabsItem("Code", icon="journal-code"),
         ],
         align="center",
