@@ -1,13 +1,16 @@
 import os
 
+import pandas as pd
 import streamlit as st
 import streamlit_antd_components as sac
 
-from layout import GeoApp, page_config
+from layout import GeoApp, page_config, print_code, set_page_width, styling
 
 script_dir = os.path.dirname(__file__)
 sitelist_mcom = os.path.join(script_dir, "test_geocell.csv")
 sitelist_driveless = os.path.join(script_dir, "test_driveless.csv")
+mcom = pd.read_csv(sitelist_mcom)
+dt = pd.read_csv(sitelist_driveless)
 
 
 def init_session_state():
@@ -29,7 +32,15 @@ def run_app():
     )
 
     if tab_idx == 0:
+        set_page_width(1300)
         app = GeoApp(sitelist_mcom, sitelist_driveless)
         app.run_geo_app()
     elif tab_idx == 1:
-        st.write("A")
+        st.markdown(*styling("Cells Data", tag="h6", font_size=18, text_align="left"))
+        st.write(mcom)
+        st.markdown(
+            *styling("Geographic Data", tag="h6", font_size=18, text_align="left")
+        )
+        st.write(dt)
+        st.markdown(*styling("Full Code", tag="h6", font_size=18, text_align="left"))
+        print_code()

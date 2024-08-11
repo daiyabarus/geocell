@@ -24,3 +24,22 @@ def page_config():
     """,
         unsafe_allow_html=True,
     )
+
+
+def set_page_width(width: int):
+    """Set the page width for a Streamlit app with custom CSS.
+
+    Args:
+    ----
+        width (int): The maximum width in pixels for the content area.
+    """
+    style = f"""
+    <style>
+    .main .block-container {{
+        max-width: {width}px;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }}
+    </style>
+    """
+    st.markdown(style, unsafe_allow_html=True)

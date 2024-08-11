@@ -1,3 +1,11 @@
+import streamlit as st
+
+
+def print_code():
+    st.code(code, language="python")
+
+
+code = """
 import colorsys
 from math import asin, atan2, cos, degrees, radians, sin
 
@@ -225,7 +233,6 @@ class GeoApp:
         self.map.get_root().add_child(legend_macro)
 
     def calculate_rsrp_statistics(self) -> list[str]:
-        """Calculate total and percentage of RSRP categories with correct color coding."""
         rsrp_conditions = [
             ("-80  >= 0", lambda rsrp: rsrp >= -80, "blue"),
             ("-95  >= -80", lambda rsrp: -95 <= rsrp < -80, "#14380A"),
@@ -249,7 +256,6 @@ class GeoApp:
         return results
 
     def calculate_cellname_statistics(self) -> list[str]:
-        """Calculate total and percentage of each unique cellname."""
         total_records = len(self.driveless_data)
         results = []
 
@@ -264,14 +270,14 @@ class GeoApp:
 
     def _create_legend_template(self, color_by_ci: bool) -> str:
         sitename = self.geocell_data["site"].iloc[0]
-        legend_template = """
+        legend_template =
         {% macro html(this, kwargs) %}
         <div id='maplegend' class='maplegend'
             style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
             border-radius: 6px; padding: 10px; font-size: 12px; right: 12px; top: 70px;'>
         <div class='legend-scale'>
         <ul class='legend-labels'>
-        """
+
         if color_by_ci:
             legend_template += f"<li><strong>{sitename}<br>by EUtranCell</strong></li>"
             legend_template += "".join(self.calculate_cellname_statistics())
@@ -279,7 +285,7 @@ class GeoApp:
             legend_template += f"<li><strong>{sitename}<br>by RSRP</strong></li>"
             legend_template += "".join(self.calculate_rsrp_statistics())
 
-        legend_template += """
+        legend_template +=
         </ul>
         </div>
         </div>
@@ -295,7 +301,7 @@ class GeoApp:
         }
         </style>
         {% endmacro %}
-        """
+
         return legend_template
 
     def _display_map(self, color_by_ci: bool):
@@ -305,13 +311,13 @@ class GeoApp:
 
     @staticmethod
     def _create_popup_content(row: pd.Series) -> str:
-        return f"""
+        return f
         <div style="font-family: Arial; font-size: 16px;">
             <b>Site:</b> {row['site']}<br>
             <b>Node:</b> {row['nodeid']}<br>
             <b>Cell:</b> {row['cellname']}
         </div>
-        """
+
 
     def run_geo_app(self):
         if "tile_provider" not in st.session_state:
@@ -369,3 +375,4 @@ class GeoApp:
             self._add_spider_graph()
 
         self._display_map(color_by_ci)
+        """
