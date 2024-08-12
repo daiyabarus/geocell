@@ -171,8 +171,7 @@ class GeoApp:
             location=[x, y],
             popup=row["cellname"],
             icon=folium.DivIcon(
-                html=f'<div style="color: black">☢️{row["cellname"]}</div>',
-                icon_size=16,
+                html=f'<div style="font-size: 16pt; color: gray">{row["cellname"]}</div>'
             ),
         ).add_to(layer)
 

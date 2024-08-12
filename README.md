@@ -4,7 +4,7 @@
 
 This tutorial will guide you through creating a geospatial visualization app called `GeoApp`. The app is designed to visualize geospatial data, including cellular coverage and signal strength, using Python libraries such as Folium, Pandas, and Streamlit.
 
-## Libraries in Use
+## Libraries
 
 1. **colorsys**
    The `colorsys` module provides functions to convert colors between different color systems, such as RGB and HSV. In this app, it's used to generate color codes in the HSV space, which are then converted to hexadecimal format for consistent color mapping.
@@ -30,11 +30,11 @@ The `GeoApp` includes a method called `define_tile_options` that defines the dif
 
 ### 1. **OpenStreetMap**
    - **URL:** `https://tile.openstreetmap.org/{z}/{x}/{y}.png`
-   - **Description:** OpenStreetMap (OSM) is a free, editable map of the world, created and maintained by a community of mappers. It's known for its high quality and up-to-date geographical data. The OSM tile option provides a standard street map view, which is suitable for a wide range of geospatial visualization tasks. It's open-source and doesn't require any API keys or usage restrictions.
+   OpenStreetMap (OSM) is a free, editable map of the world, created and maintained by a community of mappers. It's known for its high quality and up-to-date geographical data. The OSM tile option provides a standard street map view, which is suitable for a wide range of geospatial visualization tasks. It's open-source and doesn't require any API keys or usage restrictions.
 
 ### 2. **Google Hybrid**
    - **URL:** `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}`
-   - **Description:** The Google Hybrid tile combines both satellite imagery and road data, giving a comprehensive view that includes both natural features and man-made infrastructure. This tile is useful for visualizations where both geographical context and infrastructure details are important. The Google Hybrid tile provides a rich and detailed map view, but it typically requires API access and may have usage limits depending on the terms of service.
+   The Google Hybrid tile combines both satellite imagery and road data, giving a comprehensive view that includes both natural features and man-made infrastructure. This tile is useful for visualizations where both geographical context and infrastructure details are important. The Google Hybrid tile provides a rich and detailed map view, but it typically requires API access and may have usage limits depending on the terms of service.
 
 ## Class Structure and Functionality
 
