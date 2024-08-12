@@ -1,7 +1,7 @@
-# GeoApp
+# GeoCellApp
 
 ## Output sample PCI or Cellname with spidergraph
-![Output Geocell](output.jpg)
+![Output Geocell](output.png)
 
 ## Output sample RSRP with spidergraph
 ![rsrp Geocell](rsrp.png)

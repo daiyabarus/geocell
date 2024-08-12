@@ -7,6 +7,7 @@ import folium
 import pandas as pd
 import streamlit as st
 from branca.element import MacroElement, Template
+from geopy.distance import geodesic
 
 from layout.styles import styling
 
@@ -179,7 +180,14 @@ class GeoApp:
             location=[x, y],
             popup=row["cellname"],
             icon=folium.DivIcon(
-                html=f'<div style="font-size: 16pt; color: gray">{row["cellname"]}</div>'
+                html=f"""
+                    <div style="
+                        font-size: 16pt;
+                        color: black;
+                        text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white;">
+                        {row["cellname"]}
+                    </div>
+                """
             ),
         ).add_to(layer)
 
@@ -194,7 +202,7 @@ class GeoApp:
             folium.CircleMarker(
                 location=[row["lat_grid"], row["long_grid"]],
                 radius=6,
-                popup=f"Cellname: {row['cellname']} RSRP: {row['rsrp']} dBm",
+                popup=f"Cellname: {row['cellname']}<br>RSRP: {row['rsrp']} dBm",
                 color=color,
                 fill=True,
                 fill_color=color,
@@ -204,6 +212,8 @@ class GeoApp:
 
     def _add_spider_graph(self):
         for row in self._iterate_rows(self.driveless_data):
+            point_location = (row["lat_grid"], row["long_grid"])
+            distance = geodesic(self.map_center, point_location).kilometers
             if row["cellname"] in self.cell_edge_coordinates:
                 edge_lat, edge_lon = self.cell_edge_coordinates[row["cellname"]]
                 color = self.get_ci_color(row["cellname"])
@@ -215,15 +225,28 @@ class GeoApp:
                     color=color,
                     weight=0.5,
                     opacity=0.5,
+                    popup=f"Distance from Site:<br>{distance:.2f} km",
                 ).add_to(self.map)
 
     def _initialize_map(self, tile_provider: str):
         self.map = folium.Map(
             location=self.map_center,
-            zoom_start=15,
             tiles=self.tile_options[tile_provider],
             attr=tile_provider,
         )
+
+        if self.driveless_data is not None:
+            bounds = [
+                [
+                    self.driveless_data["lat_grid"].min(),
+                    self.driveless_data["long_grid"].min(),
+                ],
+                [
+                    self.driveless_data["lat_grid"].max(),
+                    self.driveless_data["long_grid"].max(),
+                ],
+            ]
+            self.map.fit_bounds(bounds, padding=(5, 5))
 
     def _add_dynamic_legend(self, color_by_ci: bool):
         legend_template = self._create_legend_template(color_by_ci)
@@ -356,10 +379,10 @@ class GeoApp:
             st.rerun()
 
         categories = [
-            "cellname",
-            "RSRP",
-            "cellname with Spidergraph",
             "RSRP with Spidergraph",
+            "RSRP",
+            "cellname",
+            "cellname with Spidergraph",
         ]
 
         with col2:
