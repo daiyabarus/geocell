@@ -1,4 +1,6 @@
 import colorsys
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from math import asin, atan2, cos, degrees, radians, sin
 
 import folium
@@ -9,18 +11,24 @@ from branca.element import MacroElement, Template
 from layout.styles import styling
 
 
+@dataclass
 class GeoApp:
-    def __init__(
-        self, geocell_data: str | pd.DataFrame, driveless_data: str | pd.DataFrame
-    ):
-        self.geocell_data = self._load_data(geocell_data)
-        self.driveless_data = self._load_data(driveless_data)
+    geocell_data: str | pd.DataFrame
+    driveless_data: str | pd.DataFrame
+    unique_cellname: list[str] = field(init=False)
+    map_center: list[float] = field(init=False)
+    tile_options: dict[str, str] = field(init=False)
+    map: folium.Map = field(init=False, default=None)
+    ci_colors: dict[str, str] = field(init=False)
+    cell_edge_coordinates: dict[str, list[float]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.geocell_data = self._load_data(self.geocell_data)
+        self.driveless_data = self._load_data(self.driveless_data)
         self.unique_cellname = self._get_unique_cellname()
         self.map_center = self._calculate_map_center()
         self.tile_options = self._define_tile_options()
-        self.map = None
         self.ci_colors = self._assign_ci_colors()
-        self.cell_edge_coordinates: dict[str, list[float]] = {}
 
     @staticmethod
     def _load_data(data: str | pd.DataFrame) -> pd.DataFrame:
@@ -77,15 +85,12 @@ class GeoApp:
         angle_step = beamwidth_rad / 49
         start_angle = azimuth_rad - beamwidth_rad / 2
 
-        points = [[lat, lon]]
-        points.extend(
-            [
-                self._calculate_point(
-                    lat_rad, lon_rad, start_angle + i * angle_step, radius
-                )
-                for i in range(50)
-            ]
-        )
+        points = [[lat, lon]] + [
+            self._calculate_point(
+                lat_rad, lon_rad, start_angle + i * angle_step, radius
+            )
+            for i in range(50)
+        ]
         points.append([lat, lon])
 
         edge_point = self._calculate_point(lat_rad, lon_rad, azimuth_rad, radius)
@@ -107,12 +112,15 @@ class GeoApp:
 
     def _add_geocell_layer(self):
         geocell_layer = folium.FeatureGroup(name="Geocell Sites")
-        for _, row in self.geocell_data.iterrows():
+        for row in self._iterate_rows(self.geocell_data):
             color = self.get_ci_color(row["cellname"])
             self._add_sector_beam(row, color, geocell_layer)
             self._add_site_label(row, geocell_layer)
             self._add_circle_marker(row, color, geocell_layer)
         geocell_layer.add_to(self.map)
+
+    def _iterate_rows(self, df: pd.DataFrame) -> Generator[pd.Series, None, None]:
+        yield from (row for _, row in df.iterrows())
 
     def _add_sector_beam(self, row: pd.Series, color: str, layer: folium.FeatureGroup):
         sector_polygon, edge_point = self._create_sector_beam(
@@ -177,7 +185,7 @@ class GeoApp:
 
     def _add_driveless_layer(self, color_by_ci: bool = True):
         driveless_layer = folium.FeatureGroup(name="Driveless Data")
-        for _, row in self.driveless_data.iterrows():
+        for row in self._iterate_rows(self.driveless_data):
             color = (
                 self.get_ci_color(row["cellname"])
                 if color_by_ci
@@ -195,7 +203,7 @@ class GeoApp:
         driveless_layer.add_to(self.map)
 
     def _add_spider_graph(self):
-        for _, row in self.driveless_data.iterrows():
+        for row in self._iterate_rows(self.driveless_data):
             if row["cellname"] in self.cell_edge_coordinates:
                 edge_lat, edge_lon = self.cell_edge_coordinates[row["cellname"]]
                 color = self.get_ci_color(row["cellname"])
@@ -224,8 +232,7 @@ class GeoApp:
         self.map.get_root().add_child(legend_macro)
 
     def calculate_rsrp_statistics(self) -> list[str]:
-        """Calculate total and percentage of RSRP categories with correct color coding."""
-        rsrp_conditions = [
+        rsrp_ranges = [
             ("-80  >= 0", lambda rsrp: rsrp >= -80, "blue"),
             ("-95  >= -80", lambda rsrp: -95 <= rsrp < -80, "#14380A"),
             ("-100 >= -95", lambda rsrp: -100 <= rsrp < -95, "#93FC7C"),
@@ -236,7 +243,7 @@ class GeoApp:
         total_records = len(self.driveless_data)
         results = []
 
-        for label, condition, color in rsrp_conditions:
+        for label, condition, color in rsrp_ranges:
             count = self.driveless_data[
                 self.driveless_data["rsrp"].apply(condition)
             ].shape[0]
@@ -248,11 +255,12 @@ class GeoApp:
         return results
 
     def calculate_cellname_statistics(self) -> list[str]:
-        """Calculate total and percentage of each unique cellname."""
         total_records = len(self.driveless_data)
         results = []
 
-        for cellname, count in self.driveless_data["cellname"].value_counts().items():
+        counts = self.driveless_data["cellname"].value_counts()
+
+        for cellname, count in counts.items():
             percentage = (count / total_records) * 100 if total_records > 0 else 0
             color = self.get_ci_color(cellname)
             results.append(

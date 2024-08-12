@@ -7,6 +7,9 @@ def print_code():
 
 code = """
 import colorsys
+from collections import Counter
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from math import asin, atan2, cos, degrees, radians, sin
 
 import folium
@@ -17,18 +20,24 @@ from branca.element import MacroElement, Template
 from layout.styles import styling
 
 
+@dataclass
 class GeoApp:
-    def __init__(
-        self, geocell_data: str | pd.DataFrame, driveless_data: str | pd.DataFrame
-    ):
-        self.geocell_data = self._load_data(geocell_data)
-        self.driveless_data = self._load_data(driveless_data)
+    geocell_data: str | pd.DataFrame
+    driveless_data: str | pd.DataFrame
+    unique_cellname: list[str] = field(init=False)
+    map_center: list[float] = field(init=False)
+    tile_options: dict[str, str] = field(init=False)
+    map: folium.Map = field(init=False, default=None)
+    ci_colors: dict[str, str] = field(init=False)
+    cell_edge_coordinates: dict[str, list[float]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.geocell_data = self._load_data(self.geocell_data)
+        self.driveless_data = self._load_data(self.driveless_data)
         self.unique_cellname = self._get_unique_cellname()
         self.map_center = self._calculate_map_center()
         self.tile_options = self._define_tile_options()
-        self.map = None
         self.ci_colors = self._assign_ci_colors()
-        self.cell_edge_coordinates: dict[str, list[float]] = {}
 
     @staticmethod
     def _load_data(data: str | pd.DataFrame) -> pd.DataFrame:
@@ -85,15 +94,12 @@ class GeoApp:
         angle_step = beamwidth_rad / 49
         start_angle = azimuth_rad - beamwidth_rad / 2
 
-        points = [[lat, lon]]
-        points.extend(
-            [
-                self._calculate_point(
-                    lat_rad, lon_rad, start_angle + i * angle_step, radius
-                )
-                for i in range(50)
-            ]
-        )
+        points = [[lat, lon]] + [
+            self._calculate_point(
+                lat_rad, lon_rad, start_angle + i * angle_step, radius
+            )
+            for i in range(50)
+        ]
         points.append([lat, lon])
 
         edge_point = self._calculate_point(lat_rad, lon_rad, azimuth_rad, radius)
@@ -115,12 +121,15 @@ class GeoApp:
 
     def _add_geocell_layer(self):
         geocell_layer = folium.FeatureGroup(name="Geocell Sites")
-        for _, row in self.geocell_data.iterrows():
+        for row in self._iterate_rows(self.geocell_data):
             color = self.get_ci_color(row["cellname"])
             self._add_sector_beam(row, color, geocell_layer)
             self._add_site_label(row, geocell_layer)
             self._add_circle_marker(row, color, geocell_layer)
         geocell_layer.add_to(self.map)
+
+    def _iterate_rows(self, df: pd.DataFrame) -> Generator[pd.Series, None, None]:
+        yield from (row for _, row in df.iterrows())
 
     def _add_sector_beam(self, row: pd.Series, color: str, layer: folium.FeatureGroup):
         sector_polygon, edge_point = self._create_sector_beam(
@@ -179,14 +188,13 @@ class GeoApp:
             location=[x, y],
             popup=row["cellname"],
             icon=folium.DivIcon(
-                html=f'<div style="color: black">☢️{row["cellname"]}</div>',
-                icon_size=16,
+                html=f'<div style="font-size: 16pt; color: gray">{row["cellname"]}</div>'
             ),
         ).add_to(layer)
 
     def _add_driveless_layer(self, color_by_ci: bool = True):
         driveless_layer = folium.FeatureGroup(name="Driveless Data")
-        for _, row in self.driveless_data.iterrows():
+        for row in self._iterate_rows(self.driveless_data):
             color = (
                 self.get_ci_color(row["cellname"])
                 if color_by_ci
@@ -204,7 +212,7 @@ class GeoApp:
         driveless_layer.add_to(self.map)
 
     def _add_spider_graph(self):
-        for _, row in self.driveless_data.iterrows():
+        for row in self._iterate_rows(self.driveless_data):
             if row["cellname"] in self.cell_edge_coordinates:
                 edge_lat, edge_lon = self.cell_edge_coordinates[row["cellname"]]
                 color = self.get_ci_color(row["cellname"])
@@ -233,24 +241,26 @@ class GeoApp:
         self.map.get_root().add_child(legend_macro)
 
     def calculate_rsrp_statistics(self) -> list[str]:
-        rsrp_conditions = [
-            ("-80  >= 0", lambda rsrp: rsrp >= -80, "blue"),
-            ("-95  >= -80", lambda rsrp: -95 <= rsrp < -80, "#14380A"),
-            ("-100 >= -95", lambda rsrp: -100 <= rsrp < -95, "#93FC7C"),
-            ("-110 >= -100", lambda rsrp: -110 <= rsrp < -100, "yellow"),
-            ("-110 >= -140", lambda rsrp: rsrp < -110, "red"),
+        rsrp_ranges = [
+            (-80, "blue"),
+            (-95, "#14380A"),
+            (-100, "#93FC7C"),
+            (-110, "yellow"),
+            (-115, "red"),
         ]
 
         total_records = len(self.driveless_data)
         results = []
 
-        for label, condition, color in rsrp_conditions:
-            count = self.driveless_data[
-                self.driveless_data["rsrp"].apply(condition)
-            ].shape[0]
+        counts = Counter(
+            next((color for limit, color in rsrp_ranges if rsrp >= limit), "red")
+            for rsrp in self.driveless_data["rsrp"]
+        )
+
+        for label, count in counts.items():
             percentage = (count / total_records) * 100 if total_records > 0 else 0
             results.append(
-                f"<li><span style='background:  {color}; opacity: 1;'></span>{label}&emsp;{count}&emsp;{percentage:.2f}%</li>"
+                f"<li><span style='background:  {label}; opacity: 1;'></span>&emsp;{count}&emsp;{percentage:.2f}%</li>"
             )
 
         return results
@@ -259,7 +269,9 @@ class GeoApp:
         total_records = len(self.driveless_data)
         results = []
 
-        for cellname, count in self.driveless_data["cellname"].value_counts().items():
+        counts = self.driveless_data["cellname"].value_counts()
+
+        for cellname, count in counts.items():
             percentage = (count / total_records) * 100 if total_records > 0 else 0
             color = self.get_ci_color(cellname)
             results.append(
@@ -270,14 +282,14 @@ class GeoApp:
 
     def _create_legend_template(self, color_by_ci: bool) -> str:
         sitename = self.geocell_data["site"].iloc[0]
-        legend_template =
+        legend_template = ""
         {% macro html(this, kwargs) %}
         <div id='maplegend' class='maplegend'
             style='position: absolute; z-index:9999; background-color: rgba(192, 192, 192, 1);
             border-radius: 6px; padding: 10px; font-size: 12px; right: 12px; top: 70px;'>
         <div class='legend-scale'>
         <ul class='legend-labels'>
-
+        ""
         if color_by_ci:
             legend_template += f"<li><strong>{sitename}<br>by EUtranCell</strong></li>"
             legend_template += "".join(self.calculate_cellname_statistics())
@@ -285,7 +297,7 @@ class GeoApp:
             legend_template += f"<li><strong>{sitename}<br>by RSRP</strong></li>"
             legend_template += "".join(self.calculate_rsrp_statistics())
 
-        legend_template +=
+        legend_template += ""
         </ul>
         </div>
         </div>
@@ -301,7 +313,7 @@ class GeoApp:
         }
         </style>
         {% endmacro %}
-
+        ""
         return legend_template
 
     def _display_map(self, color_by_ci: bool):
@@ -311,13 +323,13 @@ class GeoApp:
 
     @staticmethod
     def _create_popup_content(row: pd.Series) -> str:
-        return f
+        return f""
         <div style="font-family: Arial; font-size: 16px;">
             <b>Site:</b> {row['site']}<br>
             <b>Node:</b> {row['nodeid']}<br>
             <b>Cell:</b> {row['cellname']}
         </div>
-
+        ""
 
     def run_geo_app(self):
         if "tile_provider" not in st.session_state:
@@ -375,4 +387,5 @@ class GeoApp:
             self._add_spider_graph()
 
         self._display_map(color_by_ci)
+
         """
